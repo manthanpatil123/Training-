@@ -20,36 +20,35 @@ function EditProduct() {
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [photo,setphoto] = useState()
+  const [photo, setphoto] = useState();
   const [submitted, setSubmitted] = useState(false);
   const history = useNavigate();
   const [cats, setCats] = useState([]);
+  const [isFileValid, setIsFileValid] = useState(true);
+  const [fileSizeError, setFileSizeError] = useState(""); // New state for file size errors
+  const [fileTypeError, setFileTypeError] = useState(""); // New state for file type errors
 
   useEffect(() => {
-    axios.get(BASE_URL + "api/category")
-      .then(resp => setCats(resp.data));
-    axios.get(BASE_URL + "api/products/" + prodid)
-      .then(resp => {
-        setProduct({
-          pname: resp.data.pname,
-          pcat: resp.data.pcat,
-          price: resp.data.price,
-          qty: resp.data.qty,
-          photo: resp.data.photo,
-          descr: resp.data.descr,
-        });
-        setphoto(BASE_URL+'images/'+resp.data.photo)
+    axios.get(BASE_URL + "api/category").then((resp) => setCats(resp.data));
+    axios.get(BASE_URL + "api/products/" + prodid).then((resp) => {
+      setProduct({
+        pname: resp.data.pname,
+        pcat: resp.data.pcat,
+        price: resp.data.price,
+        qty: resp.data.qty,
+        photo: resp.data.photo,
+        descr: resp.data.descr,
       });
-
+      setphoto(BASE_URL + "images/" + resp.data.photo);
+    });
   }, [prodid]);
 
   const handleInput = (e) => {
     const { name, value } = e.target;
-    setProduct(prev => ({ ...prev, [name]: value }));
+    setProduct((prev) => ({ ...prev, [name]: value }));
 
-    // Validate and update errors
     const validationErrors = productvalidation({ ...product, [name]: value });
-    setErrors(prevErrors => {
+    setErrors((prevErrors) => {
       const updatedErrors = { ...prevErrors };
       if (!validationErrors[name]) {
         delete updatedErrors[name];
@@ -60,11 +59,10 @@ function EditProduct() {
 
   const handleCategoryChange = (e) => {
     const { name, value } = e.target;
-    setProduct(prev => ({ ...prev, [name]: value }));
+    setProduct((prev) => ({ ...prev, [name]: value }));
 
-    // Validate and update errors
     const validationErrors = productvalidation({ ...product, [name]: value });
-    setErrors(prevErrors => {
+    setErrors((prevErrors) => {
       const updatedErrors = { ...prevErrors };
       if (!validationErrors[name]) {
         delete updatedErrors[name];
@@ -75,31 +73,68 @@ function EditProduct() {
 
   const handleFileInput = (e) => {
     const file = e.target.files[0];
-    setSelectedPhoto(file);
-    setphoto(URL.createObjectURL(file))
-    setProduct(prev => ({ ...prev, photo: file }));
 
-    // Clear error for the file field if it's now valid
-    const updatedErrors = { ...errors };
     if (file) {
-      delete updatedErrors.photo;
+      let hasError = false;
+
+      // Clear previous errors
+      setFileSizeError("");
+      setFileTypeError("");
+
+      // Check for file type
+      if (!["image/jpeg", "image/png", "image/jpg"].includes(file.type)) {
+        setFileTypeError("Only JPG, JPEG, and PNG files are allowed.");
+        setIsFileValid(false);
+        setErrors((prevErrors) => ({
+          ...prevErrors,
+          photo: "Only JPG, JPEG, and PNG files are allowed.",
+        }));
+        hasError = true;
+      }
+
+      // Check for file size if no file type error
+      if (!hasError && file.size > 2 * 1024 * 1024) {
+        // 2 MB in bytes
+        setFileSizeError("File size must be less than 2 MB.");
+        setIsFileValid(false);
+        setErrors((prevErrors) => ({
+          ...prevErrors,
+          photo: "File size must be less than 2 MB.",
+        }));
+        hasError = true;
+      }
+
+      if (!hasError) {
+        setSelectedPhoto(file);
+        setphoto(URL.createObjectURL(file));
+        setProduct((prev) => ({ ...prev, photo: file }));
+        setIsFileValid(true);
+
+        // Clear error for the file field if it's now valid
+        const updatedErrors = { ...errors };
+        delete updatedErrors.photo;
+        setErrors(updatedErrors);
+      }
     }
-    setErrors(updatedErrors);
   };
 
   const handleBlur = (e) => {
     const { name, value } = e.target;
-    const trimmedValue = value.trim().replace(/\s+/g, ' '); // Clean up leading/trailing/multiple spaces
+    const trimmedValue = value.trim().replace(/\s+/g, " ");
 
-    setProduct(prev => ({ ...prev, [name]: trimmedValue }));
-    setTouched(prev => ({ ...prev, [name]: true }));
+    setProduct((prev) => ({ ...prev, [name]: trimmedValue }));
+    setTouched((prev) => ({ ...prev, [name]: true }));
 
-    const validationError = productvalidation({ ...product, [name]: trimmedValue });
-    setErrors(prevErrors => ({ ...prevErrors, ...validationError }));
+    const validationError = productvalidation({
+      ...product,
+      [name]: trimmedValue,
+    });
+    setErrors((prevErrors) => ({ ...prevErrors, ...validationError }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
     const allFieldsTouched = {
       pname: true,
       pcat: true,
@@ -112,10 +147,13 @@ function EditProduct() {
     const validationErrors = productvalidation(product);
     setErrors(validationErrors);
 
-    if (Object.keys(validationErrors).length === 0) {
+    if (Object.keys(validationErrors).length === 0 && isFileValid) {
       setSubmitted(true);
     } else {
       setSubmitted(false);
+      alert(
+        "Please ensure all fields are filled correctly and select a valid image file."
+      );
     }
   };
 
@@ -129,12 +167,13 @@ function EditProduct() {
       formData.append("pcat", product.pcat);
       formData.append("sellerId", sellerid);
 
-      axios.put(BASE_URL + "api/products/" + prodid, formData)
-        .then(resp => {
+      axios
+        .put(BASE_URL + "api/products/" + prodid, formData)
+        .then((resp) => {
           alert("Product saved successfully");
           history("/myproducts");
         })
-        .catch(error => {
+        .catch((error) => {
           console.log("Error", error);
           alert("Error saving product");
         });
@@ -145,11 +184,7 @@ function EditProduct() {
     <div className="container-fluid">
       <div className="row">
         <div className="col-sm-3 offset-1">
-          <img
-            alt="Product"
-            width="300"
-            src={photo}
-          />
+          <img alt="Product" width="300" src={photo} />
         </div>
 
         <div className="col-sm-5">
@@ -159,7 +194,7 @@ function EditProduct() {
               <form onSubmit={handleSubmit}>
                 <div className="form-group form-row">
                   <label className="col-sm-4 form-control-label">
-                    <span style={{ color: 'red' }}>*</span>Product Name
+                    <span style={{ color: "red" }}>*</span>Product Name
                   </label>
                   <div className="col-sm-8">
                     <input
@@ -168,44 +203,54 @@ function EditProduct() {
                       value={product.pname}
                       onChange={handleInput}
                       onBlur={handleBlur}
-                      className={`form-control ${touched.pname && errors.pname ? 'is-invalid' : ''}`}
+                      className={`form-control ${
+                        touched.pname && errors.pname ? "is-invalid" : ""
+                      }`}
                     />
                     <div className="error-container">
-                    {touched.pname && errors.pname && (
-                      <div className="text-danger">{errors.pname}</div>
-                    )}
+                      {touched.pname && errors.pname && (
+                        <div className="text-danger float-left">
+                          {errors.pname}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="form-group form-row">
                   <label className="col-sm-4 form-control-label">
-                    <span style={{ color: 'red' }}>*</span>Category
+                    <span style={{ color: "red" }}>*</span>Category
                   </label>
                   <div className="col-sm-8">
-  <select
-    name="pcat"
-    value={product.pcat}
-    onChange={handleCategoryChange}
-    onBlur={handleBlur}
-    className={`form-control ${touched.pcat && errors.pcat ? 'is-invalid blur-arrow' : ''}`}
-  >
-    <option value="">Select Category</option>
-    {cats.map(x => (
-      <option key={x.catid} value={x.catid}>{x.catname}</option>
-    ))}
-  </select>
-  <div className="error-container">
-    {touched.pcat && errors.pcat && (
-      <div className="text-danger">{errors.pcat}</div>
-    )}
-  </div>
-</div>
-
-
+                    <select
+                      name="pcat"
+                      value={product.pcat}
+                      onChange={handleCategoryChange}
+                      onBlur={handleBlur}
+                      className={`form-control ${
+                        touched.pcat && errors.pcat
+                          ? "is-invalid blur-arrow"
+                          : ""
+                      }`}
+                    >
+                      <option value="">Select Category</option>
+                      {cats.map((x) => (
+                        <option key={x.catid} value={x.catid}>
+                          {x.catname}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="error-container">
+                      {touched.pcat && errors.pcat && (
+                        <div className="text-danger float-left">
+                          {errors.pcat}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="form-group form-row">
                   <label className="col-sm-4 form-control-label">
-                    <span style={{ color: 'red' }}>*</span>Price
+                    <span style={{ color: "red" }}>*</span>Price
                   </label>
                   <div className="col-sm-8">
                     <input
@@ -215,18 +260,22 @@ function EditProduct() {
                       onChange={handleInput}
                       onBlur={handleBlur}
                       min="1"
-                      className={`form-control ${touched.price && errors.price ? 'is-invalid' : ''}`}
+                      className={`form-control ${
+                        touched.price && errors.price ? "is-invalid" : ""
+                      }`}
                     />
                     <div className="error-container">
-                    {touched.price && errors.price && (
-                      <div className="text-danger">{errors.price}</div>
-                    )}
+                      {touched.price && errors.price && (
+                        <div className="text-danger float-left">
+                          {errors.price}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="form-group form-row">
                   <label className="col-sm-4 form-control-label">
-                    <span style={{ color: 'red' }}>*</span>Quantity
+                    <span style={{ color: "red" }}>*</span>Quantity
                   </label>
                   <div className="col-sm-8">
                     <input
@@ -236,39 +285,51 @@ function EditProduct() {
                       value={product.qty}
                       onChange={handleInput}
                       onBlur={handleBlur}
-                      className={`form-control ${touched.qty && errors.qty ? 'is-invalid' : ''}`}
+                      className={`form-control ${
+                        touched.qty && errors.qty ? "is-invalid" : ""
+                      }`}
                     />
                     <div className="error-container">
-                    {touched.qty && errors.qty && (
-                      <div className="text-danger">{errors.qty}</div>
-                    )}
+                      {touched.qty && errors.qty && (
+                        <div className="text-danger float-left">
+                          {errors.qty}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="form-group form-row">
                   <label className="col-sm-4 form-control-label">
-                    <span style={{ color: 'red' }}></span>Photo
+                    Product Image
                   </label>
                   <div className="col-sm-8">
                     <input
                       type="file"
+                      accept="image/*"
                       name="photo"
                       onChange={handleFileInput}
-                      className={`form-control-file ${touched.photo && errors.photo ? 'is-invalid' : ''}`}
+                      onBlur={handleBlur}
+                      className={`form-control ${
+                        fileSizeError || fileTypeError ? "is-invalid" : ""
+                      }`}
                     />
                     <div className="error-container">
-                    {touched.photo && errors.photo && (
-                      <div className="text-danger">{errors.photo}</div>
-                    )}
+                      {fileSizeError && (
+                        <div className="text-danger float-left">
+                          {fileSizeError}
+                        </div>
+                      )}
+                      {fileTypeError && (
+                        <div className="text-danger float-left">
+                          {fileTypeError}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                <button
-                  type="submit"
-                  className="btn btn-primary float-right"
-                  disabled={Object.keys(errors).length > 0} // Lock UI if there are validation errors
-                >
-                  Save
+
+                <button className="btn btn-primary btn-block">
+                  Update Product
                 </button>
               </form>
             </div>
